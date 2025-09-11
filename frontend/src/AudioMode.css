@@ -1,0 +1,143 @@
+.header-content {
+    position: relative;
+}
+
+.back-button {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.back-button:hover {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.audio-controls {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.audio-input-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+}
+
+.transcribed-text {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.transcript-label {
+    color: #64748b;
+    font-size: 0.9rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.transcript-text {
+    color: #1e293b;
+    font-weight: 500;
+}
+
+.audio-main-btn {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 1.5rem 3rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    font-size: 1.1rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.audio-main-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.audio-main-btn.recording {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.replay-audio {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    margin-left: 0.5rem;
+    transition: color 0.2s ease;
+}
+
+.replay-audio:hover {
+    color: #8b5cf6;
+}
+
+.woman_avatar {
+    width: 150px;
+    margin: 0 auto 1rem;
+    text-align: center;
+}
+
+.woman_avatar img {
+    width: 100%;
+    transition: transform 0.2s ease-in-out;
+}
+
+.woman_avatar.talking img {
+    animation: talk-bounce 0.5s infinite;
+}
+
+@keyframes talk-bounce {
+
+    0%,
+    100% {
+        transform: scaleY(1);
+    }
+
+    50% {
+        transform: scaleY(1.1);
+    }
+
+    /* slight vertical stretch */
+}
