@@ -1,331 +1,267 @@
-/* Website's 'Text Mode'
-   Each message object has:
-   - text (what was said),
-   - isUser (true = user, false = bot),
-   - corrections (grammar fixes),
-   - suggestions (encouragement, tips)
-
-   Other states:
-   - inputText → what's typed in the input box or transcribed from speech.
-   - isRecording → whether the mic is listening.
-   - status → temporary UI messages (e.g. "Listening…").
-   - recognition → the speech recognition object.
-*/
-
-
 import { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Send, Volume2, MessageCircle, Lightbulb, ArrowLeft } from 'lucide-react';
+import { Mic, MicOff, ArrowLeft, Volume2, VolumeX } from 'lucide-react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, useGLTF } from '@react-three/drei';
 import './AudioMode.css';
 
-const TextMode = ({ goBack }) => {
-    // Your ORIGINAL state variables - UNCHANGED
-    const [messages, setMessages] = useState([
-        {
-            id: 1,
-            text: "Bonjour! Je suis votre assistant français. Commencez à parler en français et je vous aiderai avec des corrections et des suggestions!",
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString(),
-            corrections: [],
-            suggestions: []
-        }
-    ]);
-    const [inputText, setInputText] = useState('');
-    const [isRecording, setIsRecording] = useState(false);
-    const [status, setStatus] = useState({ message: '', type: '' });
-    const [recognition, setRecognition] = useState(null);
+// Ready Player Me Avatar Model Component
+function Model({ isTalking }) {
+  const { scene, animations } = useGLTF('/avatar.glb');
+  const modelRef = useRef();
+  
+  useEffect(() => {
+    if (modelRef.current) {
+      // Position the Ready Player Me avatar properly (they're usually centered at feet)
+      modelRef.current.position.y = -0.8; // Lift up so we see head/torso
+      modelRef.current.position.x = 0;
+      modelRef.current.position.z = 0;
+      
+      if (isTalking) {
+        // Subtle head movement for Ready Player Me avatars
+        const interval = setInterval(() => {
+          modelRef.current.rotation.y = Math.sin(Date.now() * 0.005) * 0.05; // Gentle sway
+          modelRef.current.position.y = -0.8 + Math.sin(Date.now() * 0.008) * 0.02; // Slight bobbing
+        }, 50);
+        return () => clearInterval(interval);
+      } else {
+        // Reset to neutral position when not talking
+        modelRef.current.rotation.y = 0;
+        modelRef.current.position.y = -0.8;
+      }
+    }
+  }, [isTalking]);
+  
+  return <primitive ref={modelRef} object={scene} scale={[2, 2, 2]} />;
+}
 
-    const [isTalking, setIsTalking] = useState(false);
+// Main Avatar Component - Using CSS classes
+function Avatar({ isTalking = false, size = "large" }) {
+  const avatarClass = size === "large" 
+    ? `woman_avatar audio-large ${isTalking ? 'talking' : ''}` 
+    : `woman_avatar ${isTalking ? 'talking' : ''}`;
+  
+  return (
+    <div className={avatarClass}>
+      <Canvas camera={{ position: [0, 0.2, 3], fov: 35 }}>
+        
+        <ambientLight intensity={0.4} />
+        <directionalLight 
+          position={[5, 5, 5]} 
+          intensity={1.2} 
+          castShadow 
+          shadow-mapSize={[2048, 2048]}
+        />
+        <pointLight position={[0, 2, 2]} intensity={0.8} color="#ffffff" />
+        <pointLight position={[-2, 0, 1]} intensity={0.3} color="#a7c5f7" />
+        
+        <Model isTalking={isTalking} />
+        <OrbitControls 
+          enableZoom={false} 
+          enablePan={false}
+          maxPolarAngle={Math.PI / 2.2}
+          minPolarAngle={Math.PI / 3}
+          target={[0, 0, 0]}
+        />
+      </Canvas>
+    </div>
+  );
+}
 
-    const messagesEndRef = useRef(null);
-    const inputRef = useRef(null);
+const AudioMode = ({ goBack }) => {
+  const [isListening, setIsListening] = useState(false);
+  const [isTalking, setIsTalking] = useState(false);
+  const [currentText, setCurrentText] = useState("Bonjour! Je suis votre assistant français. Cliquez sur le microphone et commencez à parler en français!");
+  const [status, setStatus] = useState({ message: '', type: '' });
+  const [recognition, setRecognition] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState([]);
 
-    // Your ORIGINAL speech recognition setup - UNCHANGED
-    // preload voices + speech recognition
-    useEffect(() => {
-        if ('speechSynthesis' in window) {
-            // ensures Chrome/Edge loads available voices early
-            speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
-        }
+  // Speech recognition setup
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+    }
 
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-            const recognitionInstance = new SpeechRecognition();
-            recognitionInstance.continuous = false;
-            recognitionInstance.interimResults = false;
-            recognitionInstance.lang = 'fr-FR';
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+      recognitionInstance.continuous = false;
+      recognitionInstance.interimResults = false;
+      recognitionInstance.lang = 'fr-FR';
 
-            recognitionInstance.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                setInputText(transcript);
-                showStatus(`Speech recognized: ${transcript}`, 'success');
-            };
-            recognitionInstance.onerror = (event) => {
-                showStatus(`Speech recognition error: ${event.error}`, 'error');
-                setIsRecording(false);
-            };
-            recognitionInstance.onend = () => setIsRecording(false);
-            setRecognition(recognitionInstance);
-        }
-    }, []);
+      recognitionInstance.onresult = async (event) => {
+        const transcript = event.results[0][0].transcript;
+        setCurrentText(`Vous avez dit: "${transcript}"`);
+        
+        // Process the speech and get response
+        const response = await generateResponse(transcript);
+        setTimeout(() => {
+          setCurrentText(response);
+          if (!isMuted) {
+            speakText(response);
+          }
+        }, 1000);
+      };
 
+      recognitionInstance.onerror = (event) => {
+        showStatus(`Erreur: ${event.error}`, 'error');
+        setIsListening(false);
+      };
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+      recognitionInstance.onend = () => {
+        setIsListening(false);
+      };
 
-    // Your ORIGINAL functions - UNCHANGED
-    const showStatus = (message, type) => {
-        setStatus({ message, type });
-        setTimeout(() => setStatus({ message: '', type: '' }), 3000);
-    };
+      setRecognition(recognitionInstance);
+    }
+  }, [isMuted]);
 
-    const analyzeFrenchText = async (text) => {
-        try {
-            const response = await fetch("https://api.languagetool.org/v2/check", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ text: text, language: "fr" })
-            });
+  const showStatus = (message, type) => {
+    setStatus({ message, type });
+    setTimeout(() => setStatus({ message: '', type: '' }), 3000);
+  };
 
-            const data = await response.json();
-            const corrections = data.matches.map(match => {
-                const replacement = match.replacements[0]?.value;
-                return replacement ? `${match.message} → Essayez: "${replacement}"` : match.message;
-            });
+  const generateResponse = async (userInput) => {
+    try {
+      // Add user input to history
+      const newHistory = [...conversationHistory, { role: 'user', content: userInput }];
+      
+      // Simulate API call - replace with your actual backend
+      const response = await fetch("http://localhost:5000/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ history: newHistory, userInput })
+      });
 
-            const suggestions = [];
-            if (text.split(" ").length > 5) suggestions.push("Super phrase complète !");
+      const data = await response.json();
+      const reply = data.reply || "Désolé, je n'ai pas compris. Pouvez-vous répéter?";
+      
+      // Update conversation history
+      setConversationHistory([...newHistory, { role: 'assistant', content: reply }]);
+      
+      return reply;
+    } catch (err) {
+      console.error("Error calling backend:", err);
+      return "Désolé, il y a eu un problème. Essayez encore.";
+    }
+  };
 
-            return { corrections, suggestions };
-        } catch (err) {
-            console.error("Grammar API error:", err);
-            return { corrections: [], suggestions: [] };
-        }
-    };
+  const speakText = (text) => {
+    if (!('speechSynthesis' in window) || isMuted) return;
+    
+    // Stop any ongoing speech
+    speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'fr-FR';
+    utterance.rate = 0.9;
 
-    const generateResponse = async (conversationHistory, userInput) => {
-        try {
-            const response = await fetch("http://localhost:5000/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ history: conversationHistory, userInput })
-            });
-
-            const data = await response.json();
-            console.log("Backend returned:", data);
-            return data.reply || "Erreur de réponse API";
-        } catch (err) {
-            console.error("Error calling backend:", err);
-            return "Désolé, je n'ai pas compris.";
-        }
-    };
-
-    const speakText = (text) => {
-        if (!('speechSynthesis' in window)) return;
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'fr-FR';
-        utterance.rate = 0.9;
-
-        const voices = speechSynthesis.getVoices();
-        const french = voices.find(v =>
-            v.name === "Microsoft VivienneMultilingual Online (Natural) - French (France)"
-        );
-        if (french) utterance.voice = french;
-
-        // NEW: toggle talking animation
-        utterance.onstart = () => setIsTalking(true);
-        utterance.onend = () => setIsTalking(false);
-
-        speechSynthesis.speak(utterance);
-    };
-
-
-
-    const sendMessage = async () => {
-        if (!inputText.trim()) return;
-
-        const userMessage = {
-            id: messages.length + 1,
-            text: inputText,
-            isUser: true,
-            timestamp: new Date().toLocaleTimeString(),
-            corrections: [],
-            suggestions: []
-        };
-
-        const { corrections, suggestions } = await analyzeFrenchText(inputText);
-        const responseText = await generateResponse(messages, inputText);
-
-        const botMessage = {
-            id: messages.length + 2,
-            text: responseText,
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString(),
-            corrections,
-            suggestions
-        };
-
-        setMessages(prev => [...prev, userMessage, botMessage]);
-        setInputText('');
-        setTimeout(() => speakText(responseText), 500);
-    };
-
-    const toggleRecording = () => {
-        if (!recognition) {
-            showStatus('Speech recognition not supported in this browser', 'error');
-            return;
-        }
-        if (isRecording) recognition.stop();
-        else {
-            recognition.start();
-            showStatus('Listening... Speak in French', 'success');
-        }
-        setIsRecording(!isRecording);
-    };
-
-    const fillInput = (text) => {
-        setInputText(text);
-        inputRef.current?.focus();
-    };
-
-    // Your ORIGINAL constants - UNCHANGED
-    const quickPhrases = [
-        "Bonjour, comment allez-vous?",
-        "Je suis en train d'apprendre le français",
-        "Pouvez-vous m'aider?",
-        "Qu'est-ce que vous pensez?",
-        "Comment dit-on... en français?",
-        "Je ne comprends pas"
-    ];
-
-    const learningTips = [
-        "🗣️ Try speaking aloud for pronunciation practice",
-        "📝 Pay attention to article agreement (le/la/les)",
-        "🔄 Practice verb conjugations regularly",
-        "✅ Don't worry about mistakes - they help you learn!",
-        "🎯 Start with simple sentences and build up",
-        "📚 Use common phrases daily"
-    ];
-
-    return (
-        <div className="app">
-            <div className="container">
-                {/* Header with back button */}
-                <div className="header">
-                    <div className="header-content">
-                        <button onClick={goBack} className="back-button">
-                            <ArrowLeft size={20} />
-                            Back to Mode Selection
-                        </button>
-                        <div className="header-text">
-                            <h1>🇫🇷 French Conversational Buddy</h1>
-                            <p>Practice your French with AI-powered corrections and feedback</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="main-content">
-
-                    <div className={`woman_avatar ${isTalking ? 'talking' : ''}`}>
-                        <img src="/woman.jpg" alt="French Woman Avatar" />
-                    </div>
-
-
-                    {/* Chat Area */}
-                    <div className="chat-area">
-                        <div className="messages-container">
-                            <div className="messages">
-                                {messages.map((message) => (
-                                    <div key={message.id} className="message-group">
-                                        <div className={`message ${message.isUser ? 'user-message' : 'bot-message'}`}>
-                                            <div className="message-text">{message.text}</div>
-                                            <div className="timestamp">{message.timestamp}</div>
-                                        </div>
-
-                                        {message.corrections.map((correction, idx) => (
-                                            <div key={idx} className="correction">
-                                                <span className="correction-label">⚠️ Correction:</span>
-                                                <span className="correction-text">{correction}</span>
-                                            </div>
-                                        ))}
-
-                                        {message.suggestions.map((suggestion, idx) => (
-                                            <div key={idx} className="suggestion">
-                                                <span className="suggestion-label">💡 Suggestion:</span>
-                                                <span className="suggestion-text">{suggestion}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ))}
-                                <div ref={messagesEndRef} />
-                            </div>
-                        </div>
-
-                        {/* Input Section */}
-                        <div className="input-section">
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={inputText}
-                                onChange={(e) => setInputText(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                                placeholder="Tapez votre message en français..."
-                                className="text-input"
-                            />
-                            <button onClick={sendMessage} className="send-btn">
-                                <Send size={20} /> ENVOYER
-                            </button>
-                            <button
-                                onClick={toggleRecording}
-                                className={`mic-btn ${isRecording ? 'recording' : ''}`}
-                            >
-                                {isRecording ? <MicOff size={24} /> : <Mic size={24} />}
-                            </button>
-                        </div>
-
-                        {status.message && (
-                            <div className={`status ${status.type}`}>
-                                {status.message}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Sidebar */}
-                    <div className="sidebar">
-                        <div className="sidebar-section">
-                            <h3 className="sidebar-title"><Lightbulb size={24} /> Tips for Learning</h3>
-                            <ul className="tips-list">
-                                {learningTips.map((tip, idx) => (
-                                    <li key={idx}>{tip}</li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        <div className="sidebar-section">
-                            <h3 className="sidebar-title"><MessageCircle size={24} /> Quick Phrases</h3>
-                            <div className="phrases-container">
-                                {quickPhrases.map((phrase, idx) => (
-                                    <button key={idx} onClick={() => fillInput(phrase)} className="phrase-btn">
-                                        {phrase}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="voice-info">
-                            <h4 className="voice-title"><Volume2 size={20} /> Voice Features</h4>
-                            <p className="voice-description">
-                                • Click the microphone to speak in French<br />
-                                • Responses are automatically spoken aloud<br />
-                                • Works best in Chrome/Edge browsers
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
+    const voices = speechSynthesis.getVoices();
+    const french = voices.find(v => 
+      v.name.includes("French") && v.name.includes("France")
     );
+    if (french) utterance.voice = french;
+
+    utterance.onstart = () => setIsTalking(true);
+    utterance.onend = () => setIsTalking(false);
+
+    speechSynthesis.speak(utterance);
+  };
+
+  const toggleListening = () => {
+    if (!recognition) {
+      showStatus('Speech recognition not supported', 'error');
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      // Stop any ongoing speech before listening
+      speechSynthesis.cancel();
+      setIsTalking(false);
+      
+      recognition.start();
+      setIsListening(true);
+      setCurrentText("🎤 J'écoute... Parlez maintenant!");
+      showStatus('Listening... Speak in French', 'success');
+    }
+  };
+
+  const toggleMute = () => {
+    if (!isMuted && isTalking) {
+      speechSynthesis.cancel();
+      setIsTalking(false);
+    }
+    setIsMuted(!isMuted);
+  };
+
+  return (
+    <div className="audio-mode">
+      {/* Header */}
+      <div className="audio-header">
+        <div className="audio-header-content">
+          <button onClick={goBack} className="audio-back-button">
+            <ArrowLeft size={20} />
+            Back to Mode Selection
+          </button>
+          
+          <h1 className="audio-title">
+            🎙️ Audio French Practice
+          </h1>
+
+          <button 
+            onClick={toggleMute}
+            className="audio-mute-button"
+            title={isMuted ? "Unmute responses" : "Mute responses"}
+          >
+            {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="audio-main-content">
+        {/* Avatar Section */}
+        <div className="audio-avatar-section">
+          <Avatar isTalking={isTalking} size="large" />
+        </div>
+
+        {/* Text Display */}
+        <div className="audio-text-display">
+          <p className="audio-text-content">
+            {currentText}
+          </p>
+        </div>
+
+        {/* Controls */}
+        <div className="audio-controls">
+          <button
+            onClick={toggleListening}
+            className={`audio-main-btn ${isListening ? 'recording' : ''}`}
+          >
+            {isListening ? <MicOff size={48} /> : <Mic size={48} />}
+          </button>
+        </div>
+
+        {/* Status Display */}
+        {status.message && (
+          <div className={`audio-status ${status.type}`}>
+            {status.message}
+          </div>
+        )}
+
+        {/* Instructions */}
+        <div className="audio-instructions">
+          <p className="audio-instructions-text">
+            Click the microphone to start a voice conversation in French. 
+            I'll listen, respond, and help you practice!
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-export default TextMode;
+export default AudioMode;
