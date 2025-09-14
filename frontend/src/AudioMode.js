@@ -8,14 +8,14 @@ import './AudioMode.css';
 function Model({ isTalking }) {
   const { scene, animations } = useGLTF('/avatar.glb');
   const modelRef = useRef();
-  
+
   useEffect(() => {
     if (modelRef.current) {
       // Position the Ready Player Me avatar properly (they're usually centered at feet)
       modelRef.current.position.y = -0.8; // Lift up so we see head/torso
       modelRef.current.position.x = 0;
       modelRef.current.position.z = 0;
-      
+
       if (isTalking) {
         // Subtle head movement for Ready Player Me avatars
         const interval = setInterval(() => {
@@ -30,33 +30,33 @@ function Model({ isTalking }) {
       }
     }
   }, [isTalking]);
-  
+
   return <primitive ref={modelRef} object={scene} scale={[2, 2, 2]} />;
 }
 
 // Main Avatar Component - Using CSS classes
 function Avatar({ isTalking = false, size = "large" }) {
-  const avatarClass = size === "large" 
-    ? `woman_avatar audio-large ${isTalking ? 'talking' : ''}` 
+  const avatarClass = size === "large"
+    ? `woman_avatar audio-large ${isTalking ? 'talking' : ''}`
     : `woman_avatar ${isTalking ? 'talking' : ''}`;
-  
+
   return (
     <div className={avatarClass}>
       <Canvas camera={{ position: [0, 0.2, 3], fov: 35 }}>
-        
+
         <ambientLight intensity={0.4} />
-        <directionalLight 
-          position={[5, 5, 5]} 
-          intensity={1.2} 
-          castShadow 
+        <directionalLight
+          position={[5, 5, 5]}
+          intensity={1.2}
+          castShadow
           shadow-mapSize={[2048, 2048]}
         />
         <pointLight position={[0, 2, 2]} intensity={0.8} color="#ffffff" />
         <pointLight position={[-2, 0, 1]} intensity={0.3} color="#a7c5f7" />
-        
+
         <Model isTalking={isTalking} />
-        <OrbitControls 
-          enableZoom={false} 
+        <OrbitControls
+          enableZoom={false}
           enablePan={false}
           maxPolarAngle={Math.PI / 2.2}
           minPolarAngle={Math.PI / 3}
@@ -92,9 +92,17 @@ const AudioMode = ({ goBack }) => {
       recognitionInstance.onresult = async (event) => {
         const transcript = event.results[0][0].transcript;
         setCurrentText(`Vous avez dit: "${transcript}"`);
-        
-        // Process the speech and get response
-        const response = await generateResponse(transcript);
+
+        // ✅ Correct call and update conversation history
+        const response = await generateResponse(conversationHistory, transcript);
+
+
+        setConversationHistory(prev => [
+          ...prev,
+          { role: "user", content: transcript },
+          { role: "assistant", content: response }
+        ]);
+
         setTimeout(() => {
           setCurrentText(response);
           if (!isMuted) {
@@ -102,6 +110,7 @@ const AudioMode = ({ goBack }) => {
           }
         }, 1000);
       };
+
 
       recognitionInstance.onerror = (event) => {
         showStatus(`Erreur: ${event.error}`, 'error');
@@ -121,43 +130,35 @@ const AudioMode = ({ goBack }) => {
     setTimeout(() => setStatus({ message: '', type: '' }), 3000);
   };
 
-  const generateResponse = async (userInput) => {
+  const generateResponse = async (conversationHistory, userInput) => {
     try {
-      // Add user input to history
-      const newHistory = [...conversationHistory, { role: 'user', content: userInput }];
-      
-      // Simulate API call - replace with your actual backend
       const response = await fetch("http://localhost:5000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: newHistory, userInput })
+        body: JSON.stringify({ history: conversationHistory, userInput })
       });
 
       const data = await response.json();
-      const reply = data.reply || "Désolé, je n'ai pas compris. Pouvez-vous répéter?";
-      
-      // Update conversation history
-      setConversationHistory([...newHistory, { role: 'assistant', content: reply }]);
-      
-      return reply;
+      console.log("Backend returned:", data);
+      return data.reply || "Erreur de réponse API";
     } catch (err) {
       console.error("Error calling backend:", err);
-      return "Désolé, il y a eu un problème. Essayez encore.";
+      return "Désolé, je n'ai pas compris.";
     }
   };
 
   const speakText = (text) => {
     if (!('speechSynthesis' in window) || isMuted) return;
-    
+
     // Stop any ongoing speech
     speechSynthesis.cancel();
-    
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'fr-FR';
     utterance.rate = 0.9;
 
     const voices = speechSynthesis.getVoices();
-    const french = voices.find(v => 
+    const french = voices.find(v =>
       v.name.includes("French") && v.name.includes("France")
     );
     if (french) utterance.voice = french;
@@ -181,7 +182,7 @@ const AudioMode = ({ goBack }) => {
       // Stop any ongoing speech before listening
       speechSynthesis.cancel();
       setIsTalking(false);
-      
+
       recognition.start();
       setIsListening(true);
       setCurrentText("🎤 J'écoute... Parlez maintenant!");
@@ -206,12 +207,12 @@ const AudioMode = ({ goBack }) => {
             <ArrowLeft size={20} />
             Back to Mode Selection
           </button>
-          
+
           <h1 className="audio-title">
             🎙️ Audio French Practice
           </h1>
 
-          <button 
+          <button
             onClick={toggleMute}
             className="audio-mute-button"
             title={isMuted ? "Unmute responses" : "Mute responses"}
@@ -255,7 +256,7 @@ const AudioMode = ({ goBack }) => {
         {/* Instructions */}
         <div className="audio-instructions">
           <p className="audio-instructions-text">
-            Click the microphone to start a voice conversation in French. 
+            Click the microphone to start a voice conversation in French.
             I'll listen, respond, and help you practice!
           </p>
         </div>
