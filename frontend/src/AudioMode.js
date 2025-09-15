@@ -133,7 +133,7 @@ const AudioMode = ({ goBack }) => {
 
   const generateResponse = async (conversationHistory, userInput) => {
     try {
-      const response = await fetch("http://localhost:5000/chat", {
+      const response = await fetch("https://frenchai.onrender.com/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history: conversationHistory, userInput })
