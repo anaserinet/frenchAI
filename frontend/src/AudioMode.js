@@ -26,7 +26,7 @@ function Model({ isTalking }) {
   useFrame((state) => {
     if (!headRef.current) return;
     const idx = headRef.current.morphTargetDictionary?.mouthOpen;
-    if (idx === undefined) return;s
+    if (idx === undefined) return;
     headRef.current.morphTargetInfluences[idx] =
       isTalking ? 0.3 + 0.2 * Math.sin(state.clock.elapsedTime * 10) : 0;
   });
