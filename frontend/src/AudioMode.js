@@ -1,38 +1,39 @@
 import { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, ArrowLeft, Volume2, VolumeX } from 'lucide-react';
-import { Canvas } from '@react-three/fiber';
+import { useFrame, Canvas } from '@react-three/fiber';
 import { OrbitControls, useGLTF } from '@react-three/drei';
 import './AudioMode.css';
 
 // Ready Player Me Avatar Model Component
 function Model({ isTalking }) {
-  const { scene, animations } = useGLTF('/avatar.glb');
+  const { scene, nodes } = useGLTF('/avatar.glb');   // nodes gives you meshes
   const modelRef = useRef();
+  const headRef = useRef(); // will hold the head mesh that has blendshapes
 
   useEffect(() => {
-    if (modelRef.current) {
-      // Position the Ready Player Me avatar properly (they're usually centered at feet)
-      modelRef.current.position.y = -0.8; // Lift up so we see head/torso
-      modelRef.current.position.x = 0;
-      modelRef.current.position.z = 0;
+    if (!modelRef.current) return;
 
-      if (isTalking) {
-        // Subtle head movement for Ready Player Me avatars
-        const interval = setInterval(() => {
-          modelRef.current.rotation.y = Math.sin(Date.now() * 0.005) * 0.05; // Gentle sway
-          modelRef.current.position.y = -0.8 + Math.sin(Date.now() * 0.008) * 0.02; // Slight bobbing
-        }, 50);
-        return () => clearInterval(interval);
-      } else {
-        // Reset to neutral position when not talking
-        modelRef.current.rotation.y = 0;
-        modelRef.current.position.y = -0.8;
-      }
-    }
-  }, [isTalking]);
+    // Center/raise the avatar so you see the head
+    modelRef.current.position.set(0, -0.8, 0);
+
+    // Look up the mesh that contains mouth blendshapes
+    // Inspect your .glb in https://gltf-viewer.donmccurdy.com/
+    // and replace 'Wolf3D_Head' if it’s named differently.
+    headRef.current = nodes.Wolf3D_Head;
+  }, [nodes]);
+
+  // Animate mouthOpen morph target
+  useFrame((state) => {
+    if (!headRef.current) return;
+    const idx = headRef.current.morphTargetDictionary?.mouthOpen;
+    if (idx === undefined) return;s
+    headRef.current.morphTargetInfluences[idx] =
+      isTalking ? 0.3 + 0.2 * Math.sin(state.clock.elapsedTime * 10) : 0;
+  });
 
   return <primitive ref={modelRef} object={scene} scale={[2, 2, 2]} />;
 }
+
 
 // Main Avatar Component - Using CSS classes
 function Avatar({ isTalking = false, size = "large" }) {
